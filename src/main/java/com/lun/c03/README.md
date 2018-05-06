@@ -664,7 +664,7 @@ BiFunction&lt;Apple, Apple, Integer&gt;
 
 运用Lambda表达式
 
-	integrate((double x) -> f(x), 3, 7)
+	integrate((double x) -> x + 10, 3, 7)
 
 	public double integrate(DoubleFunction<Double> f, double a, double b) {
 		return (f.apply(a) + f.apply(b)) * (b-a) / 2.0;
