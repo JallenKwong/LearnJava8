@@ -19,6 +19,7 @@ public class BuildingStreams {
 
 		// Arrays.stream
 		int[] numbers = { 2, 3, 5, 7, 11, 13 };
+		Arrays.stream(numbers).boxed();
 		System.out.println(Arrays.stream(numbers).sum());
 
 		// Stream.iterate
@@ -61,7 +62,7 @@ public class BuildingStreams {
 		};
 		IntStream.generate(fib).limit(10).forEach(System.out::println);
 
-		long uniqueWords = Files.lines(Paths.get("lambdasinaction/chap5/data.txt"), Charset.defaultCharset())
+		long uniqueWords = Files.lines(Paths.get("data.txt"), Charset.defaultCharset())
 				.flatMap(line -> Arrays.stream(line.split(" "))).distinct().count();
 
 		System.out.println("There are " + uniqueWords + " unique words in data.txt");

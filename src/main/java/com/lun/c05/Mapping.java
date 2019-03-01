@@ -43,7 +43,15 @@ public class Mapping {
 			.collect(toList());
 		
 		System.out.println("---");
+
+		List<String> list3 = words.stream()
+				.map(word -> word.split(""))
+				.flatMap(Arrays::stream)
+				.distinct()
+				.collect(toList());
 		
+		
+		System.out.println("---");
 		// flatMap
 		words.stream()
 			.flatMap((String line) -> Arrays.stream(line.split("")))
@@ -58,5 +66,8 @@ public class Mapping {
 				.filter(pair -> (pair[0] + pair[1]) % 3 == 0)
 				.collect(toList());
 		pairs.forEach(pair -> System.out.println("(" + pair[0] + ", " + pair[1] + ")"));
+		
+		String[] arrayOfWords = {"Goodbye", "World"};
+		Stream<String> streamOfwords = Arrays.stream(arrayOfWords);
 	}
 }
