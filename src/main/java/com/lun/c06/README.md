@@ -1,6 +1,82 @@
 # 用流收集数据 #
 
-你会发现collect是一个归约操作，就像**reduce**(上一章)一样可以接受各种做法作为参数，将流中的元素累积成一个汇总结果。
+[1.收集器简介](#收集器简介)
+
+[1.1.收集器用作高级归约](#收集器用作高级归约)
+
+[1.2.预定义收集器](#预定义收集器)
+
+[2.归约和汇总](#归约和汇总)
+
+[2.1.查找流中的最大值和最小值](#查找流中的最大值和最小值)
+
+[2.2.汇总](#汇总)
+
+[2.3.连接字符串](#连接字符串)
+
+[2.4.广义的归约汇总](#广义的归约汇总)
+
+[2.4.1.Stream接口的collect和reduce有何不同](#stream接口的collect和reduce有何不同)
+
+[2.4.2.收集框架的灵活性：以不同的方法执行同样的操作](#收集框架的灵活性以不同的方法执行同样的操作)
+
+[2.4.3.根据情况选择最佳解决方案](#根据情况选择最佳解决方案)
+
+[2.4.4.用reducing连接字符串](#用reducing连接字符串)
+
+[3.分组](#分组)
+
+[3.1.多级分组](#多级分组)
+
+[3.2.按子组收集数组](#按子组收集数组)
+
+[3.2.1.把收集器的结果转换为另一种类型](#把收集器的结果转换为另一种类型)
+
+[3.2.2.与groupingBy联合使用的其他收集器的例子](#与groupingby联合使用的其他收集器的例子)
+
+[4.分区](#分区)
+
+[4.1.分区的优势](#分区的优势)
+
+[4.2.将数字按质数和非质数分区](#将数字按质数和非质数分区)
+
+[4.3.Collectors类的静态工厂方法](#collectors类的静态工厂方法)
+
+[5.收集器接口](#收集器接口)
+
+[5.1.理解Collector 接口声明的方法](#理解collector接口声明的方法)
+
+[5.1.1.建立新的结果容器：supplier方法](#建立新的结果容器supplier方法)
+
+[5.1.2.将元素添加到结果容器：accumulator方法](#将元素添加到结果容器accumulator方法)
+
+[5.1.3.对结果容器应用最终转换：finisher方法](#对结果容器应用最终转换finisher方法)
+
+[5.1.4.合并两个结果容器：combiner方法](#合并两个结果容器combiner方法)
+
+[5.1.5.characteristics方法](#characteristics方法)
+
+[5.2.全部融合到一起](#全部融合到一起)
+
+[5.2.1.进行自定义收集而不去实现Collector](#进行自定义收集而不去实现collector)
+
+[6.开发你自己的收集器以获得更好的性能](#开发你自己的收集器以获得更好的性能)
+
+[6.1.仅用质数做除数](#仅用质数做除数)
+
+[6.1.1.第一步：定义Collector类的签名](#第一步定义collector类的签名)
+
+[6.1.2.第二步：实现归约过程](#第二步实现归约过程)
+
+[6.1.3.第三步：让收集器并行工作（如果可能）](#第三步让收集器并行工作如果可能)
+
+[6.1.4.第四步：finisher方法和收集器的characteristics方法](#第四步finisher方法和收集器的characteristics方法)
+
+[6.2.比较收集器的性能](#比较收集器的性能)
+
+[7.小结](#小结)
+
+你会发现collect是一个归约操作，就像[reduce](../c06)一样可以接受各种做法作为参数，将流中的元素累积成一个汇总结果。
 
 具体的做法是通过定义新的Collector接口来定义的，因此区分Collection、Collector和collect是很重要的。
 
@@ -33,7 +109,7 @@ Java8之后
 
 	Map<Currency, List<Transaction>> transactionsByCurrencies = transactions.stream().collect(groupingBy(Transaction::getCurrency));
 
-### 收集器简介 ###
+## 收集器简介 ##
 
 **函数式编程**相对于**指令式编程**的一个主要优势：你只需指出希望的结果——“做什么”，而不用操心执行的步骤——“如何做”。
 
@@ -529,3 +605,325 @@ reducing|归约操作产生的类型|从一个作为累加器的初始值开始�
 collectingAndThen|转换函数返回的类型|包裹另一个收集器，对其结果应用转换函数|int howManyDishes = menuStream.collect(collectingAndThen(toList(), List::size));
 groupingBy|Map<K, List<T&gt;&gt;|根据项目的一个属性的值对流中的项目作问组，并将属性值作为结果Map 的键|Map<Dish.Type,List<Dish&gt;&gt; dishesByType = menuStream.collect(groupingBy(Dish::getType));
 partitioningBy|Map<Boolean,List<T&gt;&gt;|根据对流中每个项目应用谓词的结果来对项目进行分区|Map<Boolean,List<Dish&gt;&gt; vegetarianDishes = menuStream.collect(partitioningBy(Dish::isVegetarian));
+
+## 收集器接口 ##
+
+	public interface Collector<T, A, R> {
+		Supplier<A> supplier();
+		BiConsumer<A, T> accumulator();
+		Function<A, R> finisher();
+		BinaryOperator<A> combiner();
+		Set<Characteristics> characteristics();
+	}
+
+- T是流中要收集的项目的泛型。
+- A是累加器的类型，累加器是在收集过程中用于累积部分结果的对象。
+- R是收集操作得到的对象（通常但并不一定是集合）的类型。
+
+例如，你可以实现一个ToListCollector<T>类，将Stream<T>中的所有元素收集到一个List<T>里，它的签名如下：
+
+	public class ToListCollector<T> implements Collector<T, List<T>, List<T>>
+
+### 理解Collector 接口声明的方法 ###
+
+#### 建立新的结果容器：supplier方法 ####
+
+supplier方法必须返回一个结果为空的Supplier，也就是一个无参数函数，在调用时它会创建一个空的累加器实例，供数据收集过程使用。
+
+在我们的ToListCollector中，supplier返回一个空的List，如下所示：
+
+	public Supplier<List<T>> supplier() {
+		return () -> new ArrayList<T>();
+	}
+
+请注意你也可以只传递一个构造函数引用：
+
+	public Supplier<List<T>> supplier() {
+		return ArrayList::new;
+	}
+
+#### 将元素添加到结果容器：accumulator方法 ####
+
+accumulator方法会返回执行归约操作的函数。
+
+对于ToListCollector，这个函数仅仅会把当前项目添加至已经遍历过的项目的列表：
+
+	public BiConsumer<List<T>, T> accumulator() {
+		return (list, item) -> list.add(item);
+	}
+
+你也可以使用方法引用，这会更为简洁：
+
+	public BiConsumer<List<T>, T> accumulator() {
+		return List::add;
+	}
+
+#### 对结果容器应用最终转换：finisher方法 ####
+
+finisher方法必须返回在累积过程的最后要调用的一个函数，以便将累加器对象转换为整个集合操作的最终结果
+
+	public Function<List<T>, List<T>> finisher() {
+		return Function.identity();
+	}
+
+这三个方法已经足以对流进行顺序归约，至少从逻辑上看可以按图6-7进行。实践中的实现细节可能还要复杂一点，一方面是因为流的延迟性质，可能在collect操作之前还需要完成其他中间操作的流水线，另一方面则是理论上可能要进行并行归约。
+
+![](image/collector.png)
+
+#### 合并两个结果容器：combiner方法 ####
+
+四个方法中的最后一个——combiner方法会返回一个供归约操作使用的函数，它定义了对流的各个子部分进行并行处理时，各个子部分归约所得的累加器要如何合并。
+
+	public BinaryOperator<List<T>> combiner() {
+		return (list1, list2) -> {
+			list1.addAll(list2);
+			return list1; 
+		}
+	}
+
+![](image/combiner.png)
+
+有了这第四个方法，就可以对流进行并行归约了。它会用到Java 7中引入的分支/合并框架和Spliterator抽象。
+
+- 原始流会以递归方式拆分为子流，直到定义流是否需要进一步拆分的一个条件为非（如果分布式工作单位太小，并行计算往往比顺序计算要慢，而且要是生成的并行任务比处理器内核数多很多的话就毫无意义了）。
+- 现在，所有的子流都可以并行处理，即对每个子流应用图所示（上上图）的顺序归约算法。
+- 最后，使用收集器combiner方法返回的函数，将所有的部分结果两两合并。这时会把原始流每次拆分时得到的子流对应的结果合并起来。
+
+#### characteristics方法 ####
+
+最后一个方法——characteristics会返回一个不可变的Characteristics集合，它定义了收集器的行为——尤其是关于流是否可以并行归约，以及可以使用哪些优化的提示。
+
+Characteristics是一个包含三个项目的枚举。
+
+- UNORDERED——归约结果不受流中项目的遍历和累积顺序的影响。
+
+- CONCURRENT——accumulator函数可以从多个线程同时调用，且该收集器可以并行归约流。如果收集器没有标为UNORDERED，那它仅在用于无序数据源时才可以并行归约。
+
+- IDENTITY_FINISH——这表明完成器方法返回的函数是一个恒等函数，可以跳过。这种情况下，累加器对象将会直接用作归约过程的最终结果。这也意味着，将累加器A不加检查地转换为结果R是安全的。
+
+### 全部融合到一起 ###
+
+前一小节中谈到的五个方法足够我们开发自己的ToListCollector了。
+
+[ToListCollector](ToListCollector.java)
+
+[ToListCollectorTest](ToListCollectorTest.java)
+
+	List<Dish> dishes = menuStream.collect(new ToListCollector<Dish>());
+
+	List<Dish> dishes = menuStream.collect(toList());
+
+#### 进行自定义收集而不去实现Collector ####
+
+还有一种方法可以得到同样的结果而无需从头实现新的Collectors接口。
+
+Stream有一个重载的collect方法可以接受另外三个函数——supplier、accumulator和combiner，其语义和Collector接口的相应方法返回的函数完全相同。所以比如说，我们可以像下面这样把菜肴流中的项目收集到一个List中：
+
+	List<Dish> dishes = menuStream.collect(
+					ArrayList::new,//供应源
+					List::add,//累加器
+					List::addAll);//组合器
+
+这第二种形式虽然比前一个写法更为紧凑和简洁，却不那么易读。此外，以恰当的类来实现自己的自定义收集器有助于重用并可避免代码重复。另外值得注意的是，这第二个collect方法不能传递任何Characteristics，所以它永远都是一个IDENTITY_FINISH和CONCURRENT但并非UNORDERED的收集器。
+
+## 开发你自己的收集器以获得更好的性能 ##
+
+[PartitionPrimeNumbers](PartitionPrimeNumbers.java)
+
+用Collectors类提供的一个方便的工厂方法创建了一个收集器，它将前n个自然数划分为质数和非质数。
+
+将前n个自然数按质数和非质数分区
+
+	public Map<Boolean, List<Integer>> partitionPrimes(int n) {
+		return IntStream.rangeClosed(2, n).boxed()
+					.collect(partitioningBy(candidate -> isPrime(candidate));
+	}
+
+当时，通过限制除数不超过被测试数的平方根，我们对最初的isPrime方法做了一些改进：
+
+	public boolean isPrime(int candidate) {
+		int candidateRoot = (int) Math.sqrt((double) candidate);
+		return IntStream.rangeClosed(2, candidateRoot)
+					.noneMatch(i -> candidate % i == 0);
+	}
+
+为了获得更好的性能，开发一个自定义收集器。
+
+### 仅用质数做除数 ###
+
+**一个可能的优化是仅仅看看被测试数是不是能够被质数整除**。要是除数本身都不是质数就用不着测了。所以**我们可以仅仅用被测试数之前的质数来测试**。而我们目前所见的预定义收集器的问题，也就是必须自己开发一个收集器的原因在于，在收集过程中是没有办法访问部分结果的。
+
+这意味着，当测试某一个数字是否是质数的时候，你没法访问目前已经找到的其他质数的列表。
+
+	public static boolean isPrime(List<Integer> primes, int candidate) {
+		return primes.stream().noneMatch(i -> candidate % i == 0);
+	}
+
+而且还应该应用先前的优化，仅仅用小于被测数平方根的质数来测试。因此，你需要想办法在**下一个质数大于被测数平方根时立即停止测试**。不幸的是，Stream API中没有这样一种方法。
+
+你可以使用filter(p -> p <= candidateRoot)来筛选出小于被测数平方根的质数。
+
+但filter要处理整个流才能返回恰当的结果。如果质数和非质数的列表都非常大，这就是个问题了。你用不着这样做；**你只需在质数大于被测数平方根的时候停下来就可以了**。因此，我们会创建一个名为takeWhile的方法，给定一个排序列表和一个谓词，它会**返回元素满足谓词的最长前缀**：
+
+	public static <A> List<A> takeWhile(List<A> list, Predicate<A> p) {
+		int i = 0;
+		for (A item : list) {
+
+			if (!p.test(item)) {
+				return list.subList(0, i);
+			}
+
+			i++;
+		}
+
+		return list;
+	}
+
+利用这个方法，你就可以优化isPrime方法，**只用不大于被测数平方根的质数去测试了**：
+
+	public static boolean isPrime(List<Integer> primes, int candidate){
+		int candidateRoot = (int) Math.sqrt((double) candidate);
+		return takeWhile(primes, i -> i <= candidateRoot)
+				.stream()
+				.noneMatch(p -> candidate % p == 0);
+	}
+
+请注意，这个takeWhile实现是**即时**的。理想情况下，我们会想要一个延迟求值的takeWhile，这样就可以和noneMatch操作合并。不幸的是，这样的实现超出了本章的范围，你需要了解Stream API的实现才行。
+
+有了这个新的isPrime方法在手，你就可以实现自己的自定义收集器了。首先要声明一个实现Collector接口的新类，然后要开发Collector接口所需的五个方法。
+
+
+
+#### 第一步：定义Collector类的签名 ####
+
+Collector接口的定义是：
+
+	public interface Collector<T, A, R>
+
+	public class PrimeNumbersCollector
+		implements Collector<Integer,//流中元素的类型
+			Map<Boolean, List<Integer>>,//累加器类型
+			Map<Boolean, List<Integer>>>//collect操作的 类型结果类型
+
+
+#### 第二步：实现归约过程 ####
+
+supplier方法会返回一个在调用时创建累加器的函数：
+
+	public Supplier<Map<Boolean, List<Integer>>> supplier() {
+		return () -> new HashMap<Boolean, List<Integer>>() {{
+			put(true, new ArrayList<Integer>());
+			put(false, new ArrayList<Integer>());
+		}};
+	}
+
+收集器中最重要的方法是accumulator，因为它定义了如何收集流中元素的逻辑。这里它也是实现前面所讲的**优化的关键**。
+
+现在在任何一次迭代中，都可以访问收集过程的部分结果，也就是包含迄今找到的质数的累加器。
+
+	public BiConsumer<Map<Boolean, List<Integer>>, Integer> accumulator() {
+		return (Map<Boolean, List<Integer>> acc, Integer candidate) -> {
+			acc.get( isPrime(acc.get(true), candidate) )
+				.add(candidate);
+		};
+	}
+
+在这个方法中，你调用了isPrime方法，将待测试是否为质数的数以及迄今找到的质数列表（也就是累积Map中true键对应的值）传递给它。这次调用的结果随后被用作获取质数或非质数列表的键，这样就可以把新的被测数添加到恰当的列表中。
+
+
+#### 第三步：让收集器并行工作（如果可能） ####
+
+下一个方法要在并行收集时把两个部分累加器合并起来，这里，它只需要合并两个Map，即将第二个Map中质数和非质数列表中的所有数字合并到第一个Map的对应列表中就行了：
+
+	public BinaryOperator<Map<Boolean, List<Integer>>> combiner() {
+		return (Map<Boolean, List<Integer>> map1,
+			Map<Boolean, List<Integer>> map2) -> {
+				map1.get(true).addAll(map2.get(true));
+				map1.get(false).addAll(map2.get(false));
+				return map1;
+			};
+	}
+
+请注意，实际上这个收集器是**不能并行使用**的，因为**该算法本身是顺序的**。这意味着永远都不会调用combiner方法，你可以把它的实现留空（更好的做法是抛出一个UnsupportedOperationException异常）。为了让这个例子完整，我们还是决定实现它。
+
+#### 第四步：finisher方法和收集器的characteristics方法 ####
+
+前面说过，accumulator正好就是收集器的结果，用不着进一步转换，那么finisher方法就返回identity函数：
+
+	public Function<Map<Boolean, List<Integer>>,Map<Boolean, List<Integer>>> finisher() {
+		return Function.identity();
+	}
+
+就characteristics方法而言，我们已经说过，它既不是CONCURRENT也不是UNORDERED，但却是IDENTITY_FINISH的：
+
+	public Set<Characteristics> characteristics() {
+		return Collections.unmodifiableSet(EnumSet.of(IDENTITY_FINISH));
+	}
+
+最后实现的[PrimeNumbersCollector](PartitionPrimeNumbers.java)。
+
+### 比较收集器的性能 ###
+
+用partitioningBy工厂方法创建的收集器和你刚刚开发的自定义收集器在功能上是一样的，但是我们有没有实现用自定义收集器超越partitioningBy收集器性能的目标呢？现在让我们写个小测试框架来跑一下吧：
+
+[CollectorHarness](CollectorHarness.java)
+
+请注意，更为科学的测试方法是用一个诸如JMH的框架，但我们不想在这里把问题搞得更复杂。对这个例子而言，这个小小的测试类提供的结果足够准确了。这个类会先把前一百万个自然数分为质数和非质数，利用partitioningBy工厂方法创建的收集器调用方法10次，记下最快的
+一次运行。
+
+运行结果：
+
+	done in 1430
+	done in 1382
+	done in 1306
+	done in 1061
+	done in 1132
+	done in 1049
+	done in 1027
+	done in 1033
+	done in 1274
+	done in 1901
+	1.Partitioning done in: 1027 msecs
+
+	done in 1020
+	done in 860
+	done in 983
+	done in 977
+	done in 967
+	done in 957
+	done in 877
+	done in 900
+	done in 801
+	done in 850
+	2.Partitioning done in: 801 msecs
+
+还不错！这意味着开发自定义收集器并不是白费工夫，原因有二：第一，你学会了如何在需要的时候实现自己的收集器；第二，你获得了大约32%的性能提升。
+
+可以通过把实现PrimeNumbersCollector核心逻辑的三个函数传给collect方法的重载版本来获得同样的结果：
+
+    public Map<Boolean, List<Integer>> partitionPrimesWithInlineCollector(int n) {
+        return Stream.iterate(2, i -> i + 1).limit(n)//IntStream.rangeClosed(2, n).boxed()
+                .collect(
+                        () -> new HashMap<Boolean, List<Integer>>() {{
+                            put(true, new ArrayList<Integer>());
+                            put(false, new ArrayList<Integer>());
+                        }},
+                        (acc, candidate) -> {
+                            acc.get( isPrime(acc.get(true), candidate) )
+                                    .add(candidate);
+                        },
+                        (map1, map2) -> {
+                            map1.get(true).addAll(map2.get(true));
+                            map1.get(false).addAll(map2.get(false));
+                        });
+    }
+
+这样就可以避免为实现Collector接口创建一个全新的类；得到的代码更紧凑，虽然可能可读性会差一点，可重用性会差一点。
+
+## 小结 ##
+
+- collect是一个终端操作，它接受的参数是将流中元素累积到汇总结果的各种方式（称为收集器）。
+- 预定义收集器包括将流元素归约和汇总到一个值，例如计算最小值、最大值或平均值。[收集器总结](#collectors类的静态工厂方法)。
+- 预定义收集器可以用groupingBy对流中元素进行分组，或用partitioningBy进行分区。
+- 收集器可以高效地复合起来，进行多级分组、分区和归约。
+- 你可以实现Collector接口中定义的方法来开发你自己的收集器。
