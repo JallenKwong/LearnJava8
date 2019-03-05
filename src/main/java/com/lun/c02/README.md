@@ -247,11 +247,11 @@ filterApples方法的行为取决于你通过ApplePredicate对象传递的代码
 
 鼓励程序员使用行为参数化模式，通过引入Lambda表达式——一种更简洁的传递代码的方式。
 
-### 第六次尝试：使用Lambda 表达式 ###
+### 第六次尝试：使用Lambda表达式 ###
 
 	List<Apple> result = filterApples(inventory, (Apple apple) -> "red".equals(apple.getColor()));
 
-### 第七次尝试：将List 类型抽象化 ###
+### 第七次尝试：将List类型抽象化 ###
 
 目前，filterApples方法还只适用于Apple。还可以将List类型抽象化，从而超越你眼前要处理的问题。
 

@@ -14,31 +14,31 @@
 
 [5.使用流](src/main/java/com/lun/c05)
 
-[6.](src/main/java/com/lun/c06)
+[6.用流收集数据](src/main/java/com/lun/c06)
 
-[7.](src/main/java/com/lun/c07)
+[7.并行数据处理与性能](src/main/java/com/lun/c07)
 
 ## 第三部分 高效Java 8编程 ##
 
-[.](src/main/java/com/lun/c)
+[8.](src/main/java/com/lun/c08)
 
-[.](src/main/java/com/lun/c)
+[9.](src/main/java/com/lun/c09)
 
-[.](src/main/java/com/lun/c)
+[10.](src/main/java/com/lun/c10)
 
-[.](src/main/java/com/lun/c)
+[11.](src/main/java/com/lun/c11)
 
-[.](src/main/java/com/lun/c)
+[12.](src/main/java/com/lun/c12)
 
 ## 第四部分 超越Java 8 ##
 
-[.](src/main/java/com/lun/c)
+[13.](src/main/java/com/lun/c13)
 
-[.](src/main/java/com/lun/c)
+[14.](src/main/java/com/lun/c14)
 
-[.](src/main/java/com/lun/c)
+[15.](src/main/java/com/lun/c15)
 
-[.](src/main/java/com/lun/c)
+[16.](src/main/java/com/lun/c16)
 
 ## 附录 ##
 
