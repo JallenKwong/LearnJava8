@@ -20,7 +20,7 @@
 
 ## 第三部分 高效Java 8编程 ##
 
-[8.](src/main/java/com/lun/c08)
+[8.重构、测试和调试](src/main/java/com/lun/c08)
 
 [9.](src/main/java/com/lun/c09)
 
