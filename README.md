@@ -22,23 +22,23 @@
 
 [8.重构、测试和调试](src/main/java/com/lun/c08)
 
-[9.](src/main/java/com/lun/c09)
+[9.默认方法](src/main/java/com/lun/c09)
 
-[10.](src/main/java/com/lun/c10)
+[10.用Optional取代null](src/main/java/com/lun/c10)
 
-[11.](src/main/java/com/lun/c11)
+[11.CompletableFuture：组合式异步编程](src/main/java/com/lun/c11)
 
-[12.](src/main/java/com/lun/c12)
+[12.新的日期和时间API](src/main/java/com/lun/c12)
 
 ## 第四部分 超越Java 8 ##
 
-[13.](src/main/java/com/lun/c13)
+[13.函数式的思考](src/main/java/com/lun/c13)
 
-[14.](src/main/java/com/lun/c14)
+[14.函数式编程的技巧](src/main/java/com/lun/c14)
 
-[15.](src/main/java/com/lun/c15)
+[15.面向对象和函数式编程的混合：Java 8和Scala的比较](src/main/java/com/lun/c15)
 
-[16.](src/main/java/com/lun/c16)
+[16.结论以及Java的未来](src/main/java/com/lun/c16)
 
 ## 附录 ##
 
