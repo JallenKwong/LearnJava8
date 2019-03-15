@@ -246,6 +246,256 @@ Currying
 
 ## Stream的延迟计算 ##
 
+### 自定义Stream ###
+
+理解递归式Stream的思想
+
+	public static Stream<Integer> primes(int n) {
+		return Stream.iterate(2, i -> i + 1)
+			.filter(MyMathUtils::isPrime)
+			.limit(n);
+	}
+	public static boolean isPrime(int candidate) {
+		int candidateRoot = (int) Math.sqrt((double) candidate);
+		return IntStream.rangeClosed(2, candidateRoot)
+					.noneMatch(i -> candidate % i == 0);
+	}
+
+不过这一方案看起来有些笨拙：你每次都需要遍历每个数字，查看它能否被候选数字整除（实际上，你只需要测试那些已经被判定为质数的数字）。
+
+理想情况下，Stream应该实时地筛选掉那些能被质数整除的数字。这听起来有些异想天开，不过我们一起看看怎样才能达到这样的效果。
+
+1. 你需要一个由数字构成的Stream，你会在其中选择质数。
+2. 你会从该Stream中取出第一个数字（即Stream的首元素），它是一个质数（初始时，这个值是2）。
+3. 紧接着你会从Stream的尾部开始，筛选掉所有能被该数字整除的元素。
+4. 最后剩下的结果就是新的Stream，你会继续用它进行质数的查找。本质上，你还会回到第一步，继续进行后续的操作，所以这个算法是递归的。
+
+#### 第一步：构造由数字组成的Stream ####
+
+	static Intstream numbers(){
+		return IntStream.iterate(2, n -> n + 1);
+	}
+
+
+#### 第二步：取得首元素 ####
+
+	static int head(IntStream numbers){
+		return numbers.findFirst().getAsInt();
+	}
+
+#### 第三步：对尾部元素进行筛选 ####
+
+	static IntStream tail(IntStream numbers){
+		return numbers.skip(1);
+	}
+
+	IntStream numbers = numbers();
+	int head = head(numbers);
+	IntStream filtered = tail(numbers).filter(n -> n % head != 0);
+
+#### 第四步：递归地创建由质数组成的Stream ####
+
+	static IntStream primes(IntStream numbers) {
+		int head = head(numbers);
+		return IntStream.concat(
+				IntStream.of(head),
+				primes(tail(numbers).filter(n -> n % head != 0))
+			);
+	}
+
+#### 坏消息 ####
+
+不幸的是，如果执行步骤四中的代码，你会遭遇如下这个错误：“java.lang.IllegalStateException:stream has already been operated upon or closed.”实际上，你正试图使用两个终端操作：findFirst和skip将Stream切分成头尾两部分。一旦你对Stream执行一次终端操作调用，它就永久地终止了！
+
+#### 延迟计算 ####
+
+除此之外，该操作还附带着一个更为严重的问题： 静态方法IntStream.concat接受两个Stream实例作参数。但是，由于第二个参数是primes方法的直接递归调用，最终会导致出现无限递归的状况。然而，对大多数的Java应用而言，Java 8在Stream上的这一限制，即“不允许递归定义”是完全没有影响的，使用Stream后，数据库的查询更加直观了，程序还具备了并发的能力。
+
+所以，Java 8的设计者们进行了很好的平衡，选择了这一皆大欢喜的方案。不过，Scala和Haskell这样的函数式语言中Stream所具备的通用特性和模型仍然是你编程武器库中非常有益的补充。你需要一种方法推迟primes中对concat的第二个参数计算。**如果用更加技术性的程序设计术语来描述，我们称之为延迟计算、非限制式计算或者名调用**。
+
+Scala（提供了对这种算法的支持。在Scala中，你可以用下面的方式重写前面的代码，操作符#::实现了延迟连接的功能（只有在你实际需要使用Stream时才对其进行计算）：
+
+	def numbers(n: Int): Stream[Int] = n #:: numbers(n+1)
+	def primes(numbers: Stream[Int]): Stream[Int] = {
+		numbers.head #:: primes(numbers.tail filter (n -> n % numbers.head != 0))
+	}
+
+看不懂这段代码？完全没关系。我们展示这段代码的目的只是希望能让你了解Java和其他的函数式编程语言的区别。
+
+在Java语言中，你执行一次方法调用时，传递的所有参数在第一时间会被**立即**计算出来。
+
+但是，在Scala中，通过#::操作符，连接操作会**立刻**返回，而元素的计算会推迟到实际计算需要的时候才开始。我们需要通过Java实现延迟列表。
+
+### 创建你自己的延迟列表 ###
+
+[LazyLists](LazyLists.java)
+
+Java 8的Stream以其延迟性而著称。它们被刻意设计成这样，即**延迟操作**，有其独特的原因：Stream就像是一个黑盒，它接收请求生成结果。当你向一个 Stream发起一系列的操作请求时，这些请求只是被一一保存起来。只有当你向Stream发起一个终端操作时，才会实际地进行计算。
+
+这种设计具有显著的优点，特别是你需要对Stream进行多个操作时（你有可能先要进行filter操作，紧接着做一个map，最后进行一次终端操作reduce）；这种方式下Stream只需要遍历一次，不需要为每个操作遍历一次所有的元素。
+
+延迟列表，它是一种更加通用的Stream形式（延迟列表构造了一个跟Stream非常类似的概念）。延迟列表同时还提供了一种极好的方式去理解高阶函数；你可以将一个函数作为值放置到某个数据结构中，大多数时候它就静静地待在那里，一旦对其进行调用（即根据需要），它能够创建更多的数据结构。
+
+下面解释了这一思想。
+
+![](image/lazy.png)
+
+#### 一个基本的链接列表 ####
+
+	interface MyList<T> {
+		T head();
+
+		MyList<T> tail();
+
+		default boolean isEmpty() {
+			return true;
+		}
+
+		MyList<T> filter(Predicate<T> p);
+	}
+
+	static class MyLinkedList<T> implements MyList<T> {
+		final T head;
+		final MyList<T> tail;
+
+		public MyLinkedList(T head, MyList<T> tail) {
+			this.head = head;
+			this.tail = tail;
+		}
+
+		public T head() {
+			return head;
+		}
+
+		public MyList<T> tail() {
+			return tail;
+		}
+
+		public boolean isEmpty() {
+			return false;
+		}
+
+		public MyList<T> filter(Predicate<T> p) {
+			return isEmpty() ? this : 
+				p.test(head()) ? new MyLinkedList<>(head(), tail().filter(p)) : tail().filter(p);
+		}
+	}
+
+	static class Empty<T> implements MyList<T> {
+		public T head() {
+			throw new UnsupportedOperationException();
+		}
+
+		public MyList<T> tail() {
+			throw new UnsupportedOperationException();
+		}
+
+		public MyList<T> filter(Predicate<T> p) {
+			return this;
+		}
+	}
+
+可以构造一个示例的MyLinkedList值
+
+	MyList<Integer> l = new MyLinkedList<>(5, new MyLinkedList<>(10, new Empty<Integer>()));
+
+#### 一个基础的延迟列表 ####
+
+	static class LazyList<T> implements MyList<T> {
+		final T head;
+		final Supplier<MyList<T>> tail;
+
+		public LazyList(T head, Supplier<MyList<T>> tail) {
+			this.head = head;
+			this.tail = tail;
+		}
+
+		public T head() {
+			return head;
+		}
+
+		public MyList<T> tail() {
+			return tail.get();
+		}
+
+		public boolean isEmpty() {
+			return false;
+		}
+
+		public MyList<T> filter(Predicate<T> p) {
+			return isEmpty() ? this
+					: p.test(head()) ? new LazyList<>(head(), () -> tail().filter(p)) : tail().filter(p);
+		}
+
+	}
+
+可以像下面那样传递一个Supplier作为LazyList的构造器的tail参数，创建由数字构成的无限延迟列表了，该方法会创建一系列数字中的下一个元素：
+
+	public static LazyList<Integer> from(int n) {
+		return new LazyList<Integer>(n, () -> from(n+1));
+	}
+
+下面的代码执行会打印输出“2 3 4”
+
+	LazyList<Integer> numbers = from(2);
+	int two = numbers.head();
+	int three = numbers.tail().head();
+	int four = numbers.tail().tail().head();
+	System.out.println(two + " " + three + " " + four);
+
+#### 回到生成质数 ####
+
+	public static MyList<Integer> primes(MyList<Integer> numbers) {
+		return new LazyList<>(numbers.head(), 
+				() -> primes(numbers.tail().filter(n -> n % numbers.head() != 0)));
+	}
+
+#### 实现一个延迟筛选器 ####
+
+	public MyList<T> filter(Predicate<T> p) {
+		return isEmpty() ? this : 
+			p.test(head()) ? new LazyList<>(head(), () -> tail().filter(p)) : tail().filter(p);
+	}
+
+你可以计算出头三个质数：
+
+	numbers = from(2);
+	int prime_two = primes(numbers).head();
+	int prime_three = primes(numbers).tail().head();
+	int prime_five = primes(numbers).tail().tail().head();
+	System.out.println(prime_two + " " + prime_three + " " + prime_five);
+
+可以打印输出所有的质数
+
+	static <T> void printAll(MyList<T> numbers) {
+		if (numbers.isEmpty()) {
+			return;
+		}
+		System.out.println(numbers.head());
+		printAll(numbers.tail());
+	}
+
+这个程序不会永久地运行下去；它最终会由于栈溢出而失效，
+
+#### 何时使用 ####
+
+哪些实际的场景可以使用这些技术呢？好吧，你已经了解了如何向数据结构中插入函数（因为Java 8允许你这么做），这些函数可以用于按需创建数据结构的一部分，现在你不需要在创建数据结构时就一次性地定义所有的部分。
+
+如果你在编写游戏程序，比如棋牌类游戏，你可以定义一个数据结构，它在形式上涵盖了由所有可能移动构成的一个树（这些步骤要在早期完成计算工作量太大），具体的内容可以在运行时创建。最终的结果是一个**延迟树**，而不是一个延迟列表。关注延迟列表，原因是它可以和Java 8的另一个新特性Stream串接起来，我们能够针对性地讨论Stream和延迟列表各自的优缺点。
+
+---
+
+还有一个问题就是**性能**。我们很容易得出结论，延迟操作的性能会比提前操作要好——仅在程序需要时才计算值和数据结构当然比传统方式下一次性地创建所有的值（有时甚至比实际需求更多的值）要好。不过，实际情况并非如此简单。完成延迟操作的开销，比如 LazyList中每个元素之间执行额外Suppliers调用的开销，有可能超过你猜测会带来的好处，除非你仅仅只访问整个数据结构的10%，甚至更少。
+
+最后，还有一种微妙的方式会导致你的LazyList并非真正的延迟计算。如果你遍历LazyList中的值，比如from(2)，可能直到第10个元素，这种方式下，它会创建每个节点两次，最终创建20个节点，而不是10个。这几乎不能被称为延迟计算。问题在于每次实时访问LazyList的元素时，tail中的Supplier**都会被重复调用**；你可以设定tail中的Supplier方法仅在第一次实时访问时才执行调用，从而修复这一问题——计算的结果会**缓存**起来——效果上对列表进行了增强。要实现这一目标，你可以在LazyList的定义中添加一个私有的Optional<LazyList<T&gt;&gt;类型字段alreadyComputed，tail方法会依据情况查询及更新该字段的值。纯函数式语言Haskell就是以这种方式确保它所有的数据结构都恰当地进行了延迟。
+
+---
+
+我们推荐的原则是将延迟数据结构作为你编程兵器库中的强力武器。如果它们能让程序设计更简单，就尽量使用它们。如果它们会带来无法接受的性能损失，就尝试以更加传统的方式重新实现它们。
+
+## 模式匹配 ##
+
+
 
 
 
