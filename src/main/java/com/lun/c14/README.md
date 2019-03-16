@@ -495,8 +495,193 @@ Java 8的Stream以其延迟性而著称。它们被刻意设计成这样，即**
 
 ## 模式匹配 ##
 
+[PatternMatching](PatternMatching.java)
+
+函数式编程中还有另一个重要的方面，那就是（结构式）模式匹配。**不要将这个概念和正则表达式中的模式匹配相混淆**。
+
+	f(0) = 1
+	f(n) = n*f(n-1) otherwise
+
+不过在Java语言中，你只能通过if-then-else语句或者switch语句实现。随着数据类型变得愈加复杂，需要处理的代码（以及代码块）的数量也在迅速攀升。使用模式匹配能有效地减少这种混乱的情况。
+
+为了说明，我们先看一个树结构，你希望能够遍历这一整棵树。我们假设使用一种简单的数学语言，它包含数字和二进制操作符：
+
+	class Expr { ... }
+	class Number extends Expr { int val; ... }
+	class BinOp extends Expr { String opname; Expr left, right; ... }
+
+假设你需要编写方法简化一些表达式。比如，5 + 0可以简化为5。使用我们的域语言，new BinOp("+", new Number(5), new Number(0))可以简化为Number(5)。你可以像下面这样遍历Expr结构：
+
+	Expr simplifyExpression(Expr expr) {
+		if (expr instanceof BinOp
+			&& ((BinOp)expr).opname.equals("+"))
+			&& ((BinOp)expr).right instanceof Number
+			&& ... // 变得非常笨拙
+			&& ... ) {
+			return (Binop)expr.left;
+		}
+		...
+	}
+
+你可以预期这种方式下代码会迅速地变得**异常丑陋，难于维护**。
+
+### 访问者设计模式 ###
+
+Java语言中还有另一种方式可以解包数据类型，那就是使用访问者（Visitor）设计模式。本质上，使用这种方法你需要创建一个单独的类，这个类封装了一个算法，可以“访问”某种数据类型。
+
+它是如何工作的呢？访问者类接受某种数据类型的实例作为输入。它可以访问该实例的所有成员。下面是一个例子，通过这个例子我们能了解这一方法是如何工作的。首先，你需要向BinOp添加一个accept方法，它接受一个SimplifyExprVisitor作为参数，并将自身传递给它（你还需要为Number添加一个类似的方法）：
+
+	class BinOp extends Expr{
+		...
+		public Expr accept(SimplifyExprVisitor v){
+			return v.visit(this);
+		}
+	}
+
+SimplifyExprVisitor现在就可以访问BinOp对象并解包其中的内容了：
+
+	public class SimplifyExprVisitor {
+		...
+		public Expr visit(BinOp e){
+			if("+".equals(e.opname) && e.right instanceof Number && …){
+				return e.left;
+			}
+			return e;
+		}
+	}
+
+### 用模式匹配力挽狂澜 ###
+
+通过一个名为模式匹配的特性，我们能以更简单的方案解决问题。这种特性目前在Java语言中暂时还不提供，所以我们会以Scala程序设计语言的一个小例子来展示模式匹配的强大威力。
+
+假设数据类型Expr代表的是某种数学表达式，在Scala程序设计语言中（我们采用Scala的原因是它的语法与Java非常接近），你可以利用下面的这段代码解析表达式：
+
+	def simplifyExpression(expr: Expr): Expr = expr match {
+		case BinOp("+", e, Number(0)) => e // 加0
+		case BinOp("*", e, Number(1)) => e // 乘以1
+		case BinOp("/", e, Number(1)) => e // 除以1
+		case _ => expr // 不能简化expr
+	}
+
+模式匹配为操纵类树型数据结构提供了一个极其详细又极富表现力的方式。构建编译器或者处理业务规则的引擎时，这一工具尤其有用。注意，Scala的语法
+
+	Expression match { case Pattern => Expression ... }
+
+和Java的语法非常相似：
+
+	switch (Expression) { case Constant : Statement ... }
+
+Scala的通配符判断和Java中的default:扮演这同样的角色。这二者之间主要的语法区别在于**Scala是面向表达式的**，而**Java则更多地面向语句**，不过，对程序员而言，它们主要的区别是Java中模式的判断标签被限制在了某些基础类型、枚举类型、封装基础类型的类以及String类型。
+
+使用支持模式匹配的语言实践中能带来的最大的好处在于，你可以避免出现大量嵌套的switch或者if-then-else语句和字段选择操作相互交织的情况。
+
+非常明显，Scala的模式匹配在表达的难易程度上比Java更胜一筹，你只能期待未来版本的Java能支持更具表达性的switch语句。
+
+与此同时，让我们看看如何凭借Java 8的Lambda以另一种方式在Java中实现类模式匹配。
+
+我们在这里介绍这一技巧的目的**仅仅是**想让你了解Lambda另一个有趣的应用。
+
+#### Java中的伪模式匹配 ####
+
+首先，让我们看看Scala的模式匹配特性提供的匹配表达式有多么丰富。比如下面这个例子：
+
+	def simplifyExpression(expr: Expr): Expr = expr match {
+		case BinOp("+", e, Number(0)) => e
+		...
+
+它表达的意思是：“检查expr是否为BinOp，抽取它的三个组成部分（opname、left、right），紧接着对这些组成部分分别进行模式匹配——第一个部分匹配String+，第二个部分匹配变量e（它总是匹配），第三个部分匹配模式Number(0)。”
+
+换句话说，Scala（以及很多其他的函数式语言）中的模式匹配是多层次的。**我们使用Java 8的Lambda表达式进行的模式匹配模拟只会提供一层的模式匹配**；以前面的这个例子而言，这意味着它只能覆盖BinOp(op, l, r)或者Number(n)这种用例，无法顾及BinOp("+", e, Number(0))。
+
+首先，我们做一些稍微让人惊讶的观察。由于你选择使用Lambda，原则上你的代码里不应该使用if-then-else。你可以使用方法调用
+
+	myIf(condition, () -> e1, () -> e2);
+
+取代condition ? e1 : e2这样的代码。
+
+在某些地方，比如库文件中，你可能有这样的定义（使用了通用类型T）:
+
+	static <T> T myIf(boolean b, Supplier<T> truecase, Supplier<T> falsecase) {
+		return b ? truecase.get() : falsecase.get();
+	}
+
+类型T扮演了条件表达式中结果类型的角色。原则上，你可以用if-then-else完成类似的事儿。
+
+当然，**正常情况下用这种方式会增加代码的复杂度，让它变得愈加晦涩难懂**，因为用if-then-else就已经能非常顺畅地完成这一任务，这么做似乎有些杀鸡用牛刀的嫌疑。不过，我们也注意到，Java的switch和if-then-else无法完全实现模式匹配的思想，而Lambda表达式能以简单的方式实现单层的模式匹配——对照使用if-then-else链的解决方案，这种方式要简洁得多。
+
+回来继续讨论类Expr的模式匹配值，Expr类有两个子类，分别为BinOp和Number，你可以定义一个方法patternMatchExpr（同样，我们在这里会使用泛型T，用它表示模式匹配的结果类型）：
+
+	interface TriFunction<S, T, U, R>{
+		R apply(S s, T t, U u);
+	}
+
+	static <T> T patternMatchExpr(
+				Expr e,
+				TriFunction<String, Expr, Expr, T> binopcase,
+				Function<Integer, T> numcase,
+				Supplier<T> defaultcase) {
+		return
+		(e instanceof BinOp) ?
+			binopcase.apply(((BinOp)e).opname, ((BinOp)e).left, 
+			((BinOp)e).right) :
+		(e instanceof Number) ?
+			numcase.apply(((Number)e).val) :
+			defaultcase.get();
+	}
+
+最终的结果是，方法调用
+
+	patternMatchExpr(e, (op, l, r) -> {return binopcode;},
+							(n) -> {return numcode;},
+							() -> {return defaultcode;});
+
+会判断e是否为BinOp类型（如果是，会执行binopcode方法，它能够通过标识符op、l和r访问BinOp的字段），是否为Number类型（如果是，会执行numcode方法，它可以访问n的值）。这个方法还可以返回defaultcode，如果有人在将来某个时刻创建了一个树节点，它既不是BinOp类型，也不是Number类型，那就会执行这部分代码。
+
+下面这段代码通过简化的加法和乘法表达式展示了如何使用patternMatchExpr。
+
+    private static void simplify() {
+        TriFunction<String, Expr, Expr, Expr> binopcase =
+                (opname, left, right) -> {
+                    if ("+".equals(opname)) {
+                        if (left instanceof Number && ((Number) left).val == 0) {
+                            return right;
+                        }
+                        if (right instanceof Number && ((Number) right).val == 0) {
+                            return left;
+                        }
+                    }
+                    if ("*".equals(opname)) {
+                        if (left instanceof Number && ((Number) left).val == 1) {
+                            return right;
+                        }
+                        if (right instanceof Number && ((Number) right).val == 1) {
+                            return left;
+                        }
+                    }
+                    return new BinOp(opname, left, right);
+                };
+        Function<Integer, Expr> numcase = val -> new Number(val);
+        Supplier<Expr> defaultcase = () -> new Number(0);
+
+        Expr e = new BinOp("+", new Number(5), new Number(0));
+        Expr match = patternMatchExpr(e, binopcase, numcase, defaultcase);
+        if (match instanceof Number) {
+            System.out.println("Number: " + match);
+        } else if (match instanceof BinOp) {
+            System.out.println("BinOp: " + match);
+        }
+    }
+
+你可以通过下面的方式调用简化的方法：
+
+	Expr e = new BinOp("+", new Number(5), new Number(0));
+	Expr match = simplify(e);
+	System.out.println(match);
+
+## 杂项 ##
 
 
+## 小结 ##
 
 
 
